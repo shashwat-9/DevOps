@@ -178,7 +178,7 @@ Task/Practice:
 Testing the port mapping thing could be done with jenkins.
 
 ## Docker Image
-### What am I conatinerizing?
+### What am I containerizing?
 - An application that is built using the python-flask framework.
 
 ### How to create my own image
@@ -381,5 +381,68 @@ worker:
 - Limitations include, no option to deploy the application than the default networking bridge.
 - Further, there's no way to specify the ordering of the containers to getting up.
 
-#### Version 2
-- 
+###### Version 2
+- Create a property `services` in the root of the file. Under this Services, put all the configs under this service.
+- Add the `version: 2` at the top of the compose file.
+- Use the `docker-compose up` cmd to bring up the stack.
+
+- Another difference is with networking. In version one, the docker-Compose attaches all the containers to the default-bridge network, and then use links between the containers as we did before.
+- With version 2, the docker creates a dedicated bridge network for this application and then attaches all the Containers to that new network. All Containers communicate to each other using the service name.
+- So in version 2, we can get rid of the `links` tag in the docker compose. Also, in version 2, `depends_on` tag is available, which specify the building/running order of the containers.
+- Then there's version 3, the latest version, which comes up with the support of docker swarm. It will be discussed in much detail, when docker stack is discussed.
+
+###### Networking
+- So far, we've been deploying all the containers on the same default network bridge. Suppose we want to separate the user-generated traffic from the internal traffic like the backend, DB, cache, etc.
+- We can use this property from version 2. Like the `services` key, we can use the `networks` key, and put the required network names under that.
+- Then we can put the relevant network under the application key in the service key.
+
+```
+docker-compose file
+----------------------
+version: 2
+services:
+	redis:
+		image: redis
+		networks:
+			- back-end
+	db:
+		image: postgres:9.4
+		networks:
+			- back-end
+	vote:
+		image: voter-app
+		networks:
+			- front-end
+			- back-end
+
+networks:
+	front-end:
+	back-end:
+
+```
+
+ - Docker compose is not installed by default, when docker is installed.
+ - Whichever directory has the docker-compose file, will be suffixed before the container name when `docker-compose up`
+is used.
+ - From version 2 onwards, a dedicated network bridge is created, and all tns resolution is taken care of.
+ - And therefore, no need to have `links` section in the docker-compose file.
+
+### Docker Registry
+ - It's a central repository of all the docker images.
+ - `docker run <image_name>`, <image_name> is the name of the image that will be pulled. The image naming convention is
+`<User/account>/<Image/repository>`. If we don't specify the <User/account> name, it will be taken as of the <Image/Repository>
+name.
+ - The username is the name of the user account on the dockerhub, or if it's an organization, then it's the organisation name.
+ - If we don't specify from where the images are to be pulled, it is the default, central Docker hub, the DNS of which is `docker.io`
+ - The registry is where you upload and image, or the update of it.
+ - The other popular registries include, Google's registry(gcr.io).
+ - Many cloud services, like AWS, GCP, Azure, etc. provide a private registry when you open an account with them,
+ - We should always login to the private registry before running/pulling a docker image from there `docker login private-registry.io`
+ - Then we can pull/run the image like `docker run private-registry.io/apps/internal-app`
+
+What if you're running your application on-prem and don't have a private registry?
+ - We can then deploy our own private registry, as registry is itself an application, an available as an image, ofcourse.
+ - It exposes the api on port 5000
+`docker run -d -p 5000:5000 --name registry registry:2`
+ - We can use the docker image tag cmd, to tag an image with the url of the registry, `docker image tag my-image localhost:5000/my-image`
+ - `docker push localhost:5000/my-image`
