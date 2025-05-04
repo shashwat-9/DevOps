@@ -446,3 +446,108 @@ What if you're running your application on-prem and don't have a private registr
 `docker run -d -p 5000:5000 --name registry registry:2`
  - We can use the docker image tag cmd, to tag an image with the url of the registry, `docker image tag my-image localhost:5000/my-image`
  - `docker push localhost:5000/my-image`
+
+
+## Docker Engine
+ - Docker Engine is simply referred to a host with docker installed on it.
+ - When we install docker engine on a Linux host, we actually install three different components :
+ 1. Docker CLI - CMD line tool, to run various tasks related to docker. It uses the REST API to interact with the daemon
+ 2. REST API Server - API that the program can use to talk to the daemon and provide instructions.
+ 3. Docker Daemon - A background process that manages things like, images, containers, volume, networking etc.
+
+So the interaction is in this flow, 1 -> 2 -> 3. The docker cli may lie onto a different m/c, and from there it can run
+the required cmd for a remote docker engine. The cmd is like `docker -H=<ip>:<port> run <image>`. The placeholders can be
+filled with the ip and port of the remote m/c having the docker engine.
+
+### Containerization
+ - Docker uses namespace to isolate workspaces, like Process ID, Network, InterProcess, Mount, Unix TimeSharing
+ - Whenever a Linux system starts, it starts with a root process id of 1. This process kicks off other processes.
+ - PIDs are unique. A container which works in isolation with the underlying docker host, has it's own namespace. 
+ - Suppose a nginx container is running and inside the container, the PIDs are 1 snd 2, but on the host the same processes
+will have x and y PIDs.
+ - By default, there's no restriction on a container to use the System resource. It can end up using all the host resources.
+ - Docker uses cGroups or controlGroups, to control the system resource utilization by any container.
+ - We can use flags like `cpus` in the docker cmd, to limit the usage of cpu. e.g. `docker run --cpus=.5 ubuntu`
+ - For memory, memory flag can be used, to limit the memory utilization, `docker run --memory=100m ubuntu`
+
+
+### Docker Storage
+ - When we install docker on the host m/c, it creates an structure, like the following:
+ - /var/lib/docker/{aufs, containers, image, volumes}, having the relevant datas in the required folder.
+
+
+#### Docker builds images in a Layered Architecture
+ - For example, there're 'x' number of lines in a dockerfile. When we run the `docker build` cmd, it builds the image in
+in a layering way. First, the first part gets built, over to that second and so on.
+ - Let's suppose there's another dockerfile with same first 'y' lines, and we're building this dockerfile. It won't start
+from scratch, rather picks up from the image previously built till the first 'y' layers, and executes the rest of the steps over it.
+ - Once the build is over, the layers are read-only. If we run `docker run <image>`, an another layer is created over the
+top layer of the image, and this new layer is read-write, for storing logs and other related data files. This is a temporary layer.
+ - If we logon to the container, and executes a cmd to create a file, it will be in this read-write layer.
+
+###### COPY-ON-WRITE
+ - What if we want to modify the source code in the container? The image itself won't be modified, rather a new file would
+be created with the changes done, in the container layer. The container layer gets destroyed when it exits, deleting everything
+ stored into it.
+
+###### Volumes
+ - Typically, all the data related to docker resides at /var/lib/docker. A volume folder inside this location is by default
+the volume location.
+ - If we use the following cmd `docker volume create data_volume`, then a folder with data_volume name is created at /var/lib/docker/volume.
+ - We can then use cmds like `docker run -v data_volume:/var/lib/mysql mysql`, to map the mysql volume in the container 
+with the created volume.
+ - If say we have not created the data_volume2, yet we can map the volume and the relevant folder would be created.
+`docker run -v data_volume2:/var/lib/mysql mysql`
+ - Or we can use the absolute path, and the folder would be created there.
+ - There're two types of mounts: 1. Bind Mount -> When we mount a location on the container to any folder on the m/c 
+, 2. Volume Mount -> When we mount a location on the container to a volume(/usr/lib/docker/volume/{path})
+ - Using `-v` is the old style. The new way is to use `--mount`, and can be used in this way, 
+`docker run --mount type=bind,source=/data/mysql,target=/var/lib/mysql mysql`
+ - docker uses storage drivers to enable layered architecture. The common storage drivers are:
+1. AUFS
+2. ZFS
+3. BTRFS
+4. Device Mapper
+5. Overlay
+6. Overlay2
+
+It depends on the underlying OS of the docker host.
+ - To get the information of storage driver being used and other infos, we can use the `docker info` cmd.
+ - Each storage driver stores data differently. Like aufs has its own of storing data, into three directories, 
+1. diff/ : the content of each layer, each stored in a separate subdirectory
+2. layers/ : metadata about how image layers are stacked.
+3. mnt/ : Mount points, one per image or container layer.
+ - We can use `docker history <image_id/image_name>` to get the info about the steps used to create the image. The <image_id> is a
+column when `docker images` is executed.
+ - By default, `Dockerfile` is the name of the file with the building instructions, but if some other filename is there, we can use
+`docker build . -f <fileName> -t <tagName>`
+ - Caching only works from the first step to the point where it first changes. That point onwards, all the cmds gets executed again.
+ - Using the `docker system df` cmd, it will show the disk consumption by images, containers, and local volume.
+ - `docker system df -v`, this command further adds columns for shared_size, unique_size, etc.
+ - When you run `docker images`, the size it shows is the total size of the image, including all the layers.
+
+
+## Docker Networking
+ - When you install docker, it creates three networks by default,
+1. Bridge -> Default network a container gets attached to. In this networking type, each container get allocated an internal
+ip, and is attached to the Bridge network. The docker ips are in the range, `172.17.0,1/16`.
+2. none -> `--network=none`, these containers run on isolated networks, having no connectivity with anywhere.
+3. host -> we can use `--network=host`, and in this networking the port on which the container is running the same as the host port.
+Thus, with this networking, one can't run multiple containers with the same port.
+
+If we want the container to get with the other two, we can use the `--network=<name>` in the `docker run` cmd.
+
+#### User Defined Network
+ - By default, the containers get attached to the default bridge network. So, these containers can communicate with each
+other. The ip range is `172.17.0.1/16`.
+ - What if we want to have a separate network for some containers. Like A&B in network 1, C&D in network 2.
+ - We can use `docker network create --driver bridge --subnet <IP in CIDR format> <name of the network>`
+ - Now we can use the `--network=<name of the Network>` with the docker run cmd.
+ - `docker network ls` cmd lists all the network.
+ - `docker inspect <container_name>`, this cmd shows the assigned networks to it and all other detail.
+ - All docker containers on a docker host can resolve each other with the name of the container. Using ip isn't the right
+way, as after a reboot the same ip might not get allocated.
+ - The docker host has a built-in DNS server, that is used to resolve the container addresses. The DNS server on the docker
+host runs on `127.0.0.11`
+
+## Container Orchestration
