@@ -132,4 +132,162 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
  - Use `kubectl describe pod ...` to get more information about Pod Status in the Kubernetes cluster for a failing Pod.
  - Use `kubectl logs podname` to get access to pod application output that has been logged.
  - Use `kubectl exec -it podname sh` to open a shell on the pod and analyze specific components.
+ - We can use the `kubectl describe pod podname`, and in the events sections, look for events that're carried out for initiating the pod, and this can help in finding the errors/issues.
+
+
+### Lesson 6 : Pod Advanced Features
+1. Init containers
+2. SideCar containers
+3. Using Port Forwarding to Access Pods
+4. restartPolicy
+5. Jobs
+6. CronJobs
+7. Cleaning up Resources
+
+#### 1. Init Containers
+ - An init container is a special case of multi-container Pod, where the init container runs to completion before the main container is started.
+ - Starting the main container depends on the success of the init container, if the init container fails the main container will never start.
+ - In the yaml file, `initContainers` key is used, to specify the related images, cmds, variables and etc.
  
+#### 2. Sidecar Containers
+ - A sidecar container is an `initContainer` that has the `restartPolicy` field set to `Always`.
+ - It doesn't occur as a specific attribute, to create a sidecar you need to create an `initContainer` with the `restartPolicy` set to `Always`.
+ - The sidecar container will be started before the main Pod is started and is typically used to repeatedly run a command.
+ - Like a regular initContainer, the sidecar container must complete once before the main Pod is started.
+ 
+#### 3. Using Port Forwarding to Access Pods
+##### Port Forwarding
+ - Pods can be accessed in multiple ways.
+ - A very simple way is by using port forwarding to expose a Pod port on the kubectl host that forwards to the Pod.
+ - The cmd `kubectl port-forwarding fwnginx 8080:80` will expose the port 8080 on the kubectl host and forward that to port 80 on the pod.
+ - Port forwarding is useful for testing pod accessibilty on a specific cluster node, not to expose it to external users.
+ - Regular user access to applications is provided through services and Ingress(Covered Later).
+ 
+##### Demo: Port Forwarding
+ - `kubectl get pods -o wide` -> lists Ip addesses as well.
+ - `kubectl run fwginx --image=nginx`
+ - `kubectl port-forward fwginx 8080:80 &` -> & is used for running the process in the background.
+ - `curl localhost:8080`
+ - We need port forwarding, cuz the pod have their own IP addresses, and thus when we do curl on the localhost, a certain port must forward it to required port in pod.
+
+#### 4. RestartPolicy
+ - The Pod `restartPolicy` determines what happens if a container that is managed by a Pod crashes.
+ - If set to the default value `restartPolicy=always`, the container will be restarted after a crash.
+ - `restartPolicy=always` does not affect the state of the entire Pod.
+ - If the Pod is stopped or Killed, `restartPolicy=always` won't start.
+ 
+##### Demo: restartPolicy
+ - `kubectl run nginx1 --image=nginx`
+ - `kubectl get pods nginx1 -o yaml | grep restartP`
+ - `kubectl delete pods nginx1`
+ - `kubectl get pods`
+ - `kubectl run nginx2 --image=nginx`
+ - `minikube ssh` -> enters into the shell terminal for the kubernetes
+ - `crictl ps | grep nginx2` -> crictl stands for container runtime interface
+ - `crictl stop $(crictl ps | awk '/nginx2/{print $1}')`
+ - `exit`
+ - `kubectl get pods`
+ 
+#### 5. Jobs
+ - A Job starts a Pod with the `restartPolicy` set to never.
+ - To create a Pod that runs to completion, use Jobs instead.
+ - Jobs are useful for one-shot tasks, like backup, calculation, batch processing and more.
+ - Use `spec.ttlSecondsAfterFinished` to clean up completed Jobs automatically. It won't be listed in the `kubectl get jobs`, if the timeout has passed.
+ 
+##### Job Types
+ - 3 different job types can be started, which is specified by the completions and parallelism parameters:
+ 1. Non-parallel Jobs: one Pod is started, unless the Pod fails
+ ```
+	completion=1
+	parallelism=1
+ ```
+ 2. Parallel Jobs with a fixed completion count: the Job is complete after successfully running as many times as specified in `jobs.spec.completion`
+ ```
+	completion=n
+	parallelism=m
+ ```
+ Like m pods were started, out of which n completes, then the job will be successful.
+ 3. Parallel Jobs with a work queue: multiple Jobs are started, when one completes successfully, the Job is complete.
+ ```
+	completions=1
+	parallelism=n
+ ```
+ - The concept is simple, parallelism defines the number of pods that can run concurrently, and completion marks the number of pods that should complete their execution, irrespective of parallelism.
+ - To create job, we can use `kubectl create job jobname --image=imagename -- date`, not sure about the `-- date`
+ - `kubectl get jobs,pods`, lists jobs and pods both
+ - After the resouce application is completed, we can use the `kubectl delete job jobname`. And likewise, for pod.
+ - To do advanced configs in kubernetes, we can generate the yaml files for the required cmd, and tweak the required params there in the yaml.
+ 
+#### 6. CronJobs
+ - Jobs are used to run a task a specific number of times.
+ - A cronJob adds a schedule to a Job.
+ - To add the schedule, Linux crontab syntax is used.
+ - When running a cronjob, a job will be scheduled.
+ - This Job, on its turn, will start a Pod.
+ - To test a CronJob, use `kubectl create job myjob --from=cronjob/mycronjob`
+
+##### Demo: Running CronJobs
+ - `kubectl create cronjob -h | less`
+ - `kubectl create cronjob runme --image=busybox --schedule="*/2****" -- echo greetings from your cluster`
+ - `kubectl create job runme --from=cronjob/runme`
+ - `kubectl get cronjobs,jobs,pods`
+ - `kubectl logs runme-xxx-yyy`
+ - `kubectl delete cronjob runme`
+ 
+ If we don't clean the cronJob, new jobs will keep on getting created. So, if we're testing, and are not in production, we may delete the cronjob.
+ 
+
+##### Cleaning up resources
+ - Resources are not automatically cleaned up.
+ - Some resources have options for automatic cleanup if they're no longer used.
+ - Periodic manual cleanup maybe required.
+ - If a Pod is managed by deployments, the deployment must be removed, not the Pod.
+ - Try not to force resource to deletion, it may bring them in an unmanageable state. Never ever do it.
+ 
+##### Demo: Cleaning up resources
+ - `kubectl delete all`
+ - `kubectl delete all --all`
+ - `kubectl delete all --all --force --grace-period=-1` -> dangerous cmd
+ - Don't do this: `kubectl delete all --all -A --force --grace-period=-1` -> This is stupid, as it will delete all the resources in all the namespaces.
+ 
+ 
+### Lesson 7 : Kubernetes Storage
+1. Ephemeral and Persistent Storage
+2. Configuring Pod Volume Storage
+3. Configuring PersistentVolumes
+4. StorageClass
+5. Configuring PersistentVolumesClaims
+6. Configuring Pod Storage with PV and PVC
+
+#### 1. Ephemeral and Persistent storage
+##### Understanding Ephemeral Storage
+ - When a container is started, the container working environment is created as a directory on the host that runs the container.
+ - In this directory, a subdirectory is created to store changes inside the container.
+ - This subdirectory is ephemeral and disappears when the container disappears.
+ - The ephemeral storage is host-bound, and that doesn't work well in a cloud environment where multiple application instances are running.
+ 
+##### Cloud Storage Needs
+ - To provide persistent storage, the data needs to be stored separately.
+ - Also, cloud storage should not be host-bound.
+ - When cloud storage is host-bound, it needs to be synchronized when replicated pods run on different nodes.
+ - Pod Volume are a pod property that allow containers to connect to any storage type that is defined within Pod.
+ - PersistentVolumes are independent API resources and can be discovered dynamically while running Pods.
+
+#### 2. Configuring Pod Volume Storage
+ - Pod Volumes are defined as properties of Pods.
+ - Many types of storage can be addressed using volumes: see pod.spec.volumes for a list.
+ - Using Pod volumes works if Pods are used in an environment where a specific type of storage is used.
+ - For more flexibility, PersistentVolumes can be used.
+ - To use a Pod volume, the container needs to mount it, using `pod.spec.container.volumeMounts`
+ - There is no easy command to create a Pod with Volumes, use the documentation to set it up.
+
+##### Common Pod Volume Types
+ - `emptyDir` creates a temporary directory on the host that runs a Pod and is ephemeral.
+ - `hostPath` refers to a persistent directory on the host that runs the Pod.
+ - `PersistentVolumeClaim` connects to available PersistentVolumes(covered later).
+ - Other volume types `fc` and `iscsi` may make more sense in real life, but requires additional setup(and for that reason are not on CKAD).
+ 
+##### Demo: Creating a Pod with a Volume
+ - We can directly copy the required yaml form the doc, or can use the doc directly as well, like `kubectl apply -f https://k8s.io/example/pods/storage/redis.yaml`
+ - Use `kubectl describe pods redis` and check its configuration, which contains `emptyDir` storage, mounted on `/data/redis`
+ - 
