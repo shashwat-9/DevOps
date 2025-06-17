@@ -125,7 +125,7 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
  - Use `kubectl create ns nsname` to create a Namespace.
  - `kubectl run podname --image=imageName -n nspace`, this cmd runs the pod in the specified namespace.
  - Similarly, `kubectl get pods -n nspace`, will look for pods in the nspace namespace and the default namespace.
- - To delete the namespace, we can use `kubectl delete -n nspace pod podname`
+ - To delete a pod in a namespace, we can use `kubectl delete -n nspace pod podname`
  
 ##### 5. Pod TroubleShooting
  - Use `kubectl get pods` to check on current Pod status.
@@ -153,9 +153,10 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
  - A sidecar container is an `initContainer` that has the `restartPolicy` field set to `Always`.
  - It doesn't occur as a specific attribute, to create a sidecar you need to create an `initContainer` with the `restartPolicy` set to `Always`.
  - The sidecar container will be started before the main Pod is started and is typically used to repeatedly run a command.
- - Like a regular initContainer, the sidecar container must complete once before the main Pod is started.
+ - Unlike init containers, sidecar containers start with the main container and are expected to run alongside it throughout the Pod’s life.
  
 #### 3. Using Port Forwarding to Access Pods
+
 ##### Port Forwarding
  - Pods can be accessed in multiple ways.
  - A very simple way is by using port forwarding to expose a Pod port on the kubectl host that forwards to the Pod.
@@ -172,7 +173,7 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
 
 #### 4. RestartPolicy
  - The Pod `restartPolicy` determines what happens if a container that is managed by a Pod crashes.
- - If set to the default value `restartPolicy=always`, the container will be restarted after a crash.
+ - If set to the default value `restartPolicy=always`, the container will be restarted after a crash or normal exit, both.
  - `restartPolicy=always` does not affect the state of the entire Pod.
  - If the Pod is stopped or Killed, `restartPolicy=always` won't start.
  
@@ -189,7 +190,7 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
  - `kubectl get pods`
  
 #### 5. Jobs
- - A Job starts a Pod with the `restartPolicy` set to never.
+ - A Job starts a Pod with the `restartPolicy` set to never/onFailure. If we omit this, Kubernetes set it to Never.
  - To create a Pod that runs to completion, use Jobs instead.
  - Jobs are useful for one-shot tasks, like backup, calculation, batch processing and more.
  - Use `spec.ttlSecondsAfterFinished` to clean up completed Jobs automatically. It won't be listed in the `kubectl get jobs`, if the timeout has passed.
@@ -213,7 +214,7 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
 	parallelism=n
  ```
  - The concept is simple, parallelism defines the number of pods that can run concurrently, and completion marks the number of pods that should complete their execution, irrespective of parallelism.
- - To create job, we can use `kubectl create job jobname --image=imagename -- date`, not sure about the `-- date`
+ - To create job, we can use `kubectl create job jobname --image=imagename -- date`
  - `kubectl get jobs,pods`, lists jobs and pods both
  - After the resouce application is completed, we can use the `kubectl delete job jobname`. And likewise, for pod.
  - To do advanced configs in kubernetes, we can generate the yaml files for the required cmd, and tweak the required params there in the yaml.
@@ -260,6 +261,7 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
 6. Configuring Pod Storage with PV and PVC
 
 #### 1. Ephemeral and Persistent storage
+
 ##### Understanding Ephemeral Storage
  - When a container is started, the container working environment is created as a directory on the host that runs the container.
  - In this directory, a subdirectory is created to store changes inside the container.
@@ -288,6 +290,6 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
  - Other volume types `fc` and `iscsi` may make more sense in real life, but requires additional setup(and for that reason are not on CKAD).
  
 ##### Demo: Creating a Pod with a Volume
- - We can directly copy the required yaml form the doc, or can use the doc directly as well, like `kubectl apply -f https://k8s.io/example/pods/storage/redis.yaml`
+ - We can directly copy the required yaml from the doc, or can use the doc directly as well, like `kubectl apply -f https://k8s.io/example/pods/storage/redis.yaml`
  - Use `kubectl describe pods redis` and check its configuration, which contains `emptyDir` storage, mounted on `/data/redis`
  - 
