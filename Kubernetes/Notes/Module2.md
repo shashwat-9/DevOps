@@ -292,4 +292,84 @@ Tip : In real-life, the declarative way of working is used a lot. On the exam, i
 ##### Demo: Creating a Pod with a Volume
  - We can directly copy the required yaml from the doc, or can use the doc directly as well, like `kubectl apply -f https://k8s.io/example/pods/storage/redis.yaml`
  - Use `kubectl describe pods redis` and check its configuration, which contains `emptyDir` storage, mounted on `/data/redis`
- - 
+ - Use `kubectl exec -it redis -- touch /data/redis/helloworld`
+ - Use `minikube ssh` to access your minikube host.
+ - Type `crictl stop $(crictl ps | awk '/redis/{ print $1 }')` to force a Pod restart.
+ - Use exit to exit the minikube shell.
+ 
+##### Demo: Creating a Pod with a Volume
+ - Use `kubectl get pods` to see that the redis Pod is restarted.
+ - Type `kubectl exec -it redis -- ls -l /data/redis` to verify the helloworld file still exists.
+ - Use `minikube.ssh`
+ - From there: `sudo find / -name "helloworld" 2>/dev/null`
+ - `exit`
+ - Use `kubectl delete --force pod redis`
+ - Open another `minikube ssh` session to verify that the `sudo find / -name "helloworld" 2>/dev/null` command doesn't give any results.
+
+##### 3. Configuring Persistent Volumes
+ - A Pod volume can use a persistent storage type.
+ - A PersistentVolume is a specific API resource that defines the storage.
+ - Pods connect to PersistentVolumes using the PersistentVolumeClaim API resouce.
+ - The benefit of using PersistentVolumes is decoupling: the Pod doesn't connect to a specific storage type, but will pick up what is available.
+ - This is useful in DevOps environment, where different types of storage may be available for different environments.
+ 
+##### Creating PersistentVolumes
+ - There's no easy way to create PersistentVolumes from the command line: search for "Create a persistentVolume" in the documentation.
+ - In many environments, PersistentVolumes are created automatically, using StorageClass resource and an automatic storage provisioner.
+ - When setting up PeristentVolumes manually, make sure they have the `StorageClassName` property set.
+ - This property is used to connect to PeristentVolume from a PeristentVolumeClaim.
+ 
+##### Understanding StorageClassName
+ - `storageClassName` can be used to group different types of storage.
+ 1. Use `storageClassName: preprod` for preproduction storage.
+ 2. Use `storageClassName: prod` for production storage.
+ - The storageClassName property is also used for storage that has automatically been created by StorageClass.
+ - While requesting storage using PersistentVolumeClaim, `storageClassName`  must be specified to bind to a specific type of storage.
+ 
+##### Demo: Defining PersistentVolumes
+ - From the documentation, search for "Create a PersistentVolume" where you will find the pv-volume.yaml example file.
+ - Use `kubectl apply -f https://k8s.io/examples/pods/storage/pv-volume.yaml` to create persistentVolumes.
+ - Use `kubectl describe pv task-pv-volume` to learn about its properties.
+ - We"ll later use a PrersistentVolumeClaim to use this storage.
+ 
+##### 4. StorageClass
+ - StorageClass works with a storage provisioner to create PersistentVolumes on-demand.
+ - Storage provisioner are not a part of vanilla Kubernetes, they are provided by the ecosystem and may be integrated in a Kubernetes distribution.
+ - The Storage provisioner is an application that runs in Kubernetes to communicate with site-specific storage to create storage on-demand.
+ - Without storage provisioner, the StorageClass won't do anything.
+ - Configuring a storageClass is not required in CKAD.
+ 
+##### Demo: Exploring StorageClass
+ - `minikube addons list`
+ - `kubectl get storageclass`
+ - `kubectl describe storageclass`
+ 
+##### PersistentVolumeClaims
+ - The persistentVolumeClaim (PVC) resource defines a request for storage.
+ - The purpose of using a PVC is to bind to storage provided by a PersistentVolume at a specific site, without caring about its exact type.
+ - A PVC request for storage uses the following attributes:
+ 1. storageClassName: used as a selector label
+ 2. accessMode: ReadWriteOnce, ReadWriteMany or ReadOnly
+ 3. resource: the required size of storage
+ - If a storageClassName is not defined, the PVC will only bind to PersistentVolumes created by a StorageClass.
+ 
+##### Demo: Configuring PVCs
+ - From the documentation, search for "Create a PersistentVolumeClaim" where you will find the pv-claim.yaml file
+ - Use `kubectl apply -f https://k8s.io/examples/pods/storage/pv-claim.yaml`
+ - Type `kubectl get pvc,pv` and verify the claim is bound to a PersistentVolume.
+ - Notice that this PersistentVolume is selected based on the storageClassName attribute.
+ - If the requirement is less than what is provided by the disk, the entire disk shall be taken, with exclusive access.
+ 
+
+##### 6. Configuring Pos Storage with PV and PVC
+ - Within the Pod, you"ll configure a volume that uses the `persistentVolumeClaim` type.
+ - This volume is mounted using the volumeMounts container property.
+ - The persistentVolumeClaim is defined separately - you might want to include it in the same YAML file.
+ 
+###### Demo: Configuring Persistent Storage
+ - From the documentation, in the section "Configure a Pod to Use a PersistentVolume for Storage", you"ll find the pv-pod.yaml file.
+ - Use `kubectl apply -f https://k8s.io/examples/pods/storage/pv-pod.yaml`
+ - Use `kubectl describe pod task-pv-pod` to see the pod properties.
+ - Write a file to the persistent storage: `kubectl exec task-pv-pod -- touch /usr/share/nginx/html/testfile`
+ - Use `kubectl describe pv task-pv-volume` to find where the file has been written.
+ - We can verify the location of the file with `minikube ssh`.
